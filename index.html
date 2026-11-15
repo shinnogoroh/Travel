@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>旅の地図</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#F1F4F5;--surface:#FFFFFF;--ink:#17252F;--mute:#5E6E78;--line:#D5DEE2;--pin:#D9480F;--onpin:#FFFFFF}
+@media (prefers-color-scheme:dark){:root{--bg:#0E171C;--surface:#16232B;--ink:#E7EEF1;--mute:#93A4AD;--line:#27373F;--pin:#FF7A45;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Hiragino Maru Gothic ProN","Hiragino Sans","Yu Gothic",system-ui,sans-serif;line-height:1.6}
+main{max-width:720px;margin:0 auto;padding:20px 16px 48px}
+header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+h1{font-size:26px;margin:0;letter-spacing:.02em}
+.stats{margin:2px 0 0;color:var(--mute);font-size:14px}.stats span+span{margin-left:12px}
+button,input,select,textarea{font:inherit;color:inherit}
+.btn{border:0;border-radius:999px;padding:9px 18px;background:var(--ink);color:var(--bg);font-weight:700;cursor:pointer;white-space:nowrap}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.danger{background:transparent;color:var(--pin);border:1px solid var(--pin)}
+:focus-visible{outline:3px solid var(--pin);outline-offset:2px}
+.tabs{display:flex;gap:4px;margin:18px 0 14px;border-bottom:1px solid var(--line)}
+.tab{background:none;border:0;padding:8px 14px;color:var(--mute);font-weight:700;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1px}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--pin)}
+.search{display:flex;gap:8px;margin-bottom:10px}
+input,select,textarea{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 11px}
+.results{list-style:none;margin:0 0 10px;padding:0;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.results:empty{display:none}
+.results li{padding:9px 12px;cursor:pointer;font-size:14px;border-bottom:1px solid var(--line)}
+.results li:last-child{border:0}
+#map{height:62vh;min-height:360px;border-radius:14px;border:1px solid var(--line);z-index:0}
+.hint{color:var(--mute);font-size:13px;margin:10px 0 0}
+.pin{width:16px;height:16px;border-radius:50%;background:var(--pin);border:3px solid var(--onpin);box-shadow:0 1px 4px rgba(0,0,0,.45)}
+.leaflet-tooltip{font-weight:700}
+.list{list-style:none;margin:0;padding:0}
+.item{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:14px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.item h3{margin:0;font-size:17px}.item .meta{color:var(--mute);font-size:13px}
+.item .cost{font-weight:700;text-align:right}
+.item p{grid-column:1/-1;margin:2px 0 0;font-size:14px;color:var(--mute);white-space:pre-wrap}
+.item .go{grid-column:1/-1;justify-self:start;font-size:13px;padding:4px 12px}
+.empty{color:var(--mute);padding:28px 0;text-align:center}
+.tools{display:flex;gap:8px;margin-top:18px}
+#sheet{position:fixed;inset:0;background:rgba(10,20,26,.55);display:flex;align-items:flex-end;justify-content:center;z-index:3000}
+#sheet[hidden]{display:none}
+.card{background:var(--surface);width:100%;max-width:640px;max-height:92%;overflow:auto;border-radius:20px 20px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom,0px))}
+.card h2{margin:0 0 12px;font-size:19px}
+label{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}
+.card input,.card select,.card textarea{background:var(--bg)}
+.row{display:flex;gap:10px}.row>*{flex:1}.row>.narrow{flex:0 0 96px}
+textarea{min-height:88px;resize:vertical}
+.actions{display:flex;gap:8px;margin-top:18px}.actions .spacer{flex:1}
+.err{color:var(--pin);font-size:13px;min-height:20px;margin:8px 0 0}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>旅の地図</h1><p class="stats" id="stats"></p></div>
+    <button class="btn" id="add">追加</button>
+  </header>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="t-map" aria-selected="true">地図</button>
+    <button class="tab" role="tab" id="t-list" aria-selected="false">一覧</button>
+  </div>
+  <section id="v-map">
+    <div class="search"><input id="q" placeholder="場所を検索（例：京都駅、パリ）" aria-label="場所を検索"><button class="btn" id="go">検索</button></div>
+    <ul class="results" id="results"></ul>
+    <div id="map"></div>
+    <p class="hint">地図をタップして場所を追加、ピンをタップして編集できます。</p>
+  </section>
+  <section id="v-list" hidden>
+    <ul class="list" id="list"></ul>
+    <div class="tools"><button class="btn ghost" id="export">書き出し</button><button class="btn ghost" id="import">読み込み</button><input type="file" id="file" accept="application/json" hidden></div>
+  </section>
+</main>
+
+<div id="sheet" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="f-title">
+    <h2 id="f-title">場所を追加</h2>
+    <label for="f-name">場所名</label>
+    <input id="f-name" autocomplete="off" placeholder="例：清水寺">
+    <label for="f-date">訪問時期</label>
+    <input id="f-date" type="month">
+    <div class="row">
+      <div><label for="f-cost">旅行費用</label><input id="f-cost" type="number" min="0" inputmode="decimal" placeholder="0"></div>
+      <div class="narrow"><label for="f-cur">通貨</label>
+        <select id="f-cur"><option>JPY</option><option>USD</option><option>EUR</option><option>GBP</option><option>KRW</option><option>THB</option></select></div>
+    </div>
+    <label for="f-note">コメント</label>
+    <textarea id="f-note" placeholder="思い出、おすすめ、また行きたいかなど"></textarea>
+    <p class="err" id="f-err" role="alert"></p>
+    <div class="actions">
+      <button class="btn danger" id="f-del" hidden>削除</button>
+      <span class="spacer"></span>
+      <button class="btn ghost" id="f-cancel">キャンセル</button>
+      <button class="btn" id="f-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+const SYM={JPY:"¥",USD:"$",EUR:"€",GBP:"£",KRW:"₩",THB:"฿"};
+let trips=[],cur=null,delArmed=false,markers={};
+try{trips=JSON.parse(localStorage.getItem("tm_trips")||"[]")}catch(e){}
+const persist=()=>{try{localStorage.setItem("tm_trips",JSON.stringify(trips))}catch(e){}};
+
+const map=L.map("map",{worldCopyJump:true}).setView([36,138],4);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
+map.on("click",async e=>{
+  const lat=+e.latlng.lat.toFixed(5),lon=+(((e.latlng.lng+540)%360)-180).toFixed(5);
+  openForm({lat,lon});
+  try{
+    const r=await fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&accept-language=ja&lat="+lat+"&lon="+lon);
+    const j=await r.json();
+    if(cur&&!cur.id&&cur.lat===lat&&!$("#f-name").value)$("#f-name").value=j.name||(j.display_name||"").split(",")[0]||"";
+  }catch(err){}
+});
+
+const money=(n,c)=>(SYM[c]||c+" ")+Number(n).toLocaleString("ja-JP");
+const fmtDate=d=>d?d.replace(/^(\d{4})-(\d{2})$/,(m,y,mo)=>y+"年"+(+mo)+"月"):"";
+
+function drawMarkers(){
+  Object.values(markers).forEach(m=>m.remove());markers={};
+  trips.forEach(t=>{
+    const m=L.marker([t.lat,t.lon],{icon:L.divIcon({className:"",html:'<div class="pin"></div>',iconSize:[16,16],iconAnchor:[8,8]})}).addTo(map);
+    m.bindTooltip(t.name,{permanent:trips.length<=30,direction:"right",offset:[10,0]});
+    m.on("click",()=>openForm(t));
+    markers[t.id]=m;
+  });
+}
+function render(){
+  const sums={};
+  trips.forEach(t=>{if(t.cost!=null)sums[t.cur]=(sums[t.cur]||0)+t.cost});
+  const tot=Object.keys(sums).map(c=>money(sums[c],c)).join(" / ");
+  $("#stats").innerHTML="<span>"+trips.length+"か所</span>"+(tot?"<span>合計 "+tot+"</span>":"");
+  const L_=$("#list");L_.innerHTML="";
+  if(!trips.length)L_.innerHTML='<li class="empty">まだ記録がありません。地図をタップするか、検索から最初の場所を登録しましょう。</li>';
+  [...trips].sort((a,b)=>(b.date||"").localeCompare(a.date||"")).forEach(t=>{
+    const li=document.createElement("li");li.className="item";
+    const h=document.createElement("h3");h.textContent=t.name;
+    const m=document.createElement("div");m.className="meta";m.textContent=fmtDate(t.date)||"時期未設定";
+    const left=document.createElement("div");left.append(h,m);
+    const c=document.createElement("div");c.className="cost";c.textContent=t.cost!=null?money(t.cost,t.cur):"";
+    li.append(left,c);
+    if(t.note){const p=document.createElement("p");p.textContent=t.note;li.append(p)}
+    const go=document.createElement("button");go.className="btn ghost go";go.textContent="地図で見る";
+    go.onclick=e=>{e.stopPropagation();show("map");map.setView([t.lat,t.lon],12)};
+    li.append(go);
+    li.onclick=()=>openForm(t);
+    L_.append(li);
+  });
+  drawMarkers();
+}
+function show(v){
+  const m=v==="map";
+  $("#v-map").hidden=!m;$("#v-list").hidden=m;
+  $("#t-map").setAttribute("aria-selected",m);$("#t-list").setAttribute("aria-selected",!m);
+  if(m)setTimeout(()=>map.invalidateSize(),0);
+}
+$("#t-map").onclick=()=>show("map");$("#t-list").onclick=()=>show("list");
+
+/* search */
+async function search(){
+  const q=$("#q").value.trim(),ul=$("#results");
+  if(!q)return;
+  ul.innerHTML='<li>検索中…</li>';
+  try{
+    const r=await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=ja&q="+encodeURIComponent(q));
+    const arr=await r.json();
+    ul.innerHTML="";
+    if(!arr.length){ul.innerHTML='<li>見つかりませんでした。別の言葉で試してください。</li>';return}
+    arr.forEach(x=>{
+      const li=document.createElement("li");li.textContent=x.display_name;
+      li.onclick=()=>{ul.innerHTML="";map.setView([+x.lat,+x.lon],13);openForm({lat:+(+x.lat).toFixed(5),lon:+(+x.lon).toFixed(5),name:x.name||x.display_name.split(",")[0]})};
+      ul.append(li);
+    });
+  }catch(e){ul.innerHTML='<li>検索できませんでした。通信状況を確認してください。</li>'}
+}
+$("#go").onclick=search;
+$("#q").addEventListener("keydown",e=>{if(e.key==="Enter")search()});
+
+/* form */
+const F={name:$("#f-name"),date:$("#f-date"),cost:$("#f-cost"),cur:$("#f-cur"),note:$("#f-note")};
+function openForm(t){
+  cur=t||{};delArmed=false;
+  $("#f-title").textContent=cur.id?"場所を編集":"場所を追加";
+  F.name.value=cur.name||"";F.date.value=cur.date||"";F.cost.value=cur.cost!=null?cur.cost:"";
+  F.cur.value=cur.cur||"JPY";F.note.value=cur.note||"";
+  $("#f-del").hidden=!cur.id;$("#f-del").textContent="削除";$("#f-err").textContent="";
+  $("#sheet").hidden=false;F.name.focus();
+}
+function closeForm(){$("#sheet").hidden=true;cur=null}
+$("#add").onclick=()=>{show("map");$("#f-err").textContent="";alert("地図をタップするか、検索して場所を選んでください。")};
+$("#f-cancel").onclick=closeForm;
+$("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeForm()});
+$("#f-save").onclick=()=>{
+  const name=F.name.value.trim();
+  if(!name){$("#f-err").textContent="場所名を入力してください。";return}
+  const raw=F.cost.value;
+  const t={id:cur.id||"t"+Date.now().toString(36),name,date:F.date.value,cost:raw===""?null:Number(raw),cur:F.cur.value,note:F.note.value.trim(),lat:cur.lat,lon:cur.lon};
+  const i=trips.findIndex(x=>x.id===t.id);
+  i>=0?trips[i]=t:trips.push(t);
+  persist();closeForm();render();
+};
+$("#f-del").onclick=()=>{
+  if(!delArmed){delArmed=true;$("#f-del").textContent="もう一度押して削除";return}
+  trips=trips.filter(x=>x.id!==cur.id);persist();closeForm();render();
+};
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#sheet").hidden)closeForm()});
+
+/* backup */
+$("#export").onclick=()=>{
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(trips,null,1)],{type:"application/json"}));
+  a.download="travel-map-backup.json";a.click();
+};
+$("#import").onclick=()=>$("#file").click();
+$("#file").onchange=async e=>{
+  try{
+    const arr=JSON.parse(await e.target.files[0].text());
+    if(Array.isArray(arr)){arr.filter(x=>x&&x.id&&x.name&&isFinite(x.lat)&&isFinite(x.lon)).forEach(x=>{const i=trips.findIndex(t=>t.id===x.id);i>=0?trips[i]=x:trips.push(x)});persist();render()}
+  }catch(err){}
+  e.target.value="";
+};
+render();
+</script>
+</body>
+</html>
