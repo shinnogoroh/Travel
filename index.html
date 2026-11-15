@@ -39,6 +39,7 @@ input,select,textarea{width:100%;border:1px solid var(--line);background:var(--s
 .item p{grid-column:1/-1;margin:2px 0 0;font-size:14px;color:var(--mute);white-space:pre-wrap}
 .item .go{grid-column:1/-1;justify-self:start;font-size:13px;padding:4px 12px}
 .empty{color:var(--mute);padding:28px 0;text-align:center}
+.sortbar{display:flex;align-items:center;gap:8px;margin-bottom:6px}.sortbar label{margin:0;white-space:nowrap}.sortbar select{max-width:240px}
 .tools{display:flex;gap:8px;margin-top:18px}
 #sheet{position:fixed;inset:0;background:rgba(10,20,26,.55);display:flex;align-items:flex-end;justify-content:center;z-index:3000}
 #sheet[hidden]{display:none}
@@ -69,6 +70,7 @@ textarea{min-height:88px;resize:vertical}
     <p class="hint">地図をタップして場所を追加、ピンをタップして編集できます。</p>
   </section>
   <section id="v-list" hidden>
+    <div class="sortbar"><label for="sort">並び替え</label><select id="sort"><option value="date-desc">日付（新しい順）</option><option value="date-asc">日付（古い順）</option><option value="cost-desc">金額（高い順）</option><option value="cost-asc">金額（低い順）</option><option value="name">五十音順（場所名）</option><option value="country">国名順</option></select></div>
     <ul class="list" id="list"></ul>
     <div class="tools"><button class="btn ghost" id="export">書き出し</button><button class="btn ghost" id="import">読み込み</button><input type="file" id="file" accept="application/json" hidden></div>
   </section>
@@ -79,6 +81,9 @@ textarea{min-height:88px;resize:vertical}
     <h2 id="f-title">場所を追加</h2>
     <label for="f-name">場所名</label>
     <input id="f-name" autocomplete="off" placeholder="例：清水寺">
+    <label for="f-country">国</label>
+    <input id="f-country" list="countries" autocomplete="off" placeholder="例：日本">
+    <datalist id="countries"></datalist>
     <label for="f-date">訪問時期</label>
     <input id="f-date" type="month">
     <div class="row">
@@ -102,6 +107,24 @@ textarea{min-height:88px;resize:vertical}
 <script>
 const $=s=>document.querySelector(s);
 const SYM={JPY:"¥",USD:"$",EUR:"€",GBP:"£",KRW:"₩",THB:"฿"};
+const DN=(()=>{try{return new Intl.DisplayNames(["ja"],{type:"region"})}catch(e){return null}})();
+const DNE=(()=>{try{return new Intl.DisplayNames(["en"],{type:"region"})}catch(e){return null}})();
+const COUNTRIES=[],ENMAP={};
+if(DN){
+  const A="ABCDEFGHIJKLMNOPQRSTUVWXYZ",SKIP=["ZZ","EU","UN","EZ","XA","XB"];
+  for(const x of A)for(const y of A){
+    const c=x+y;if(SKIP.includes(c))continue;
+    try{const n=DN.of(c);if(n&&n!==c){COUNTRIES.push(n);if(DNE){const e=DNE.of(c);if(e&&e!==c)ENMAP[e.toLowerCase()]=n}}}catch(e){}
+  }
+  COUNTRIES.sort((a,b)=>a.localeCompare(b,"ja"));
+}
+const countryJa=a=>{
+  if(!a)return "";
+  const c=(a.country_code||"").toUpperCase();
+  try{const n=c&&DN?DN.of(c):"";if(n&&n!==c)return n}catch(e){}
+  return a.country||"";
+};
+const normCountry=v=>{v=(v||"").trim();return ENMAP[v.toLowerCase()]||v};
 let trips=[],cur=null,delArmed=false,markers={};
 try{trips=JSON.parse(localStorage.getItem("tm_trips")||"[]")}catch(e){}
 const persist=()=>{try{localStorage.setItem("tm_trips",JSON.stringify(trips))}catch(e){}};
@@ -112,13 +135,31 @@ map.on("click",async e=>{
   const lat=+e.latlng.lat.toFixed(5),lon=+(((e.latlng.lng+540)%360)-180).toFixed(5);
   openForm({lat,lon});
   try{
-    const r=await fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&accept-language=ja&lat="+lat+"&lon="+lon);
+    const r=await fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&addressdetails=1&accept-language=ja&lat="+lat+"&lon="+lon);
     const j=await r.json();
-    if(cur&&!cur.id&&cur.lat===lat&&!$("#f-name").value)$("#f-name").value=j.name||(j.display_name||"").split(",")[0]||"";
+    if(cur&&!cur.id&&cur.lat===lat){
+      if(!$("#f-name").value)$("#f-name").value=j.name||(j.display_name||"").split(",")[0]||"";
+      if(!$("#f-country").value)$("#f-country").value=countryJa(j.address);
+    }
   }catch(err){}
 });
 
 const money=(n,c)=>(SYM[c]||c+" ")+Number(n).toLocaleString("ja-JP");
+const CURS=["JPY","USD","EUR","GBP","KRW","THB"];
+let sortKey="date-desc";
+try{sortKey=localStorage.getItem("tm_sort")||sortKey}catch(e){}
+const ja=(a,b)=>(a||"").localeCompare(b||"","ja");
+function sorted(){
+  const by={
+    "date-desc":(a,b)=>(!a.date)-(!b.date)||(b.date||"").localeCompare(a.date||""),
+    "date-asc":(a,b)=>(!a.date)-(!b.date)||(a.date||"").localeCompare(b.date||""),
+    "cost-desc":(a,b)=>(a.cost==null)-(b.cost==null)||CURS.indexOf(a.cur)-CURS.indexOf(b.cur)||b.cost-a.cost,
+    "cost-asc":(a,b)=>(a.cost==null)-(b.cost==null)||CURS.indexOf(a.cur)-CURS.indexOf(b.cur)||a.cost-b.cost,
+    "name":(a,b)=>ja(a.name,b.name),
+    "country":(a,b)=>(!a.country)-(!b.country)||ja(a.country,b.country)||ja(a.name,b.name)
+  };
+  return [...trips].sort(by[sortKey]||by["date-desc"]);
+}
 const fmtDate=d=>d?d.replace(/^(\d{4})-(\d{2})$/,(m,y,mo)=>y+"年"+(+mo)+"月"):"";
 
 function drawMarkers(){
@@ -137,10 +178,10 @@ function render(){
   $("#stats").innerHTML="<span>"+trips.length+"か所</span>"+(tot?"<span>合計 "+tot+"</span>":"");
   const L_=$("#list");L_.innerHTML="";
   if(!trips.length)L_.innerHTML='<li class="empty">まだ記録がありません。地図をタップするか、検索から最初の場所を登録しましょう。</li>';
-  [...trips].sort((a,b)=>(b.date||"").localeCompare(a.date||"")).forEach(t=>{
+  sorted().forEach(t=>{
     const li=document.createElement("li");li.className="item";
     const h=document.createElement("h3");h.textContent=t.name;
-    const m=document.createElement("div");m.className="meta";m.textContent=fmtDate(t.date)||"時期未設定";
+    const m=document.createElement("div");m.className="meta";m.textContent=[t.country,fmtDate(t.date)||"時期未設定"].filter(Boolean).join("　");
     const left=document.createElement("div");left.append(h,m);
     const c=document.createElement("div");c.className="cost";c.textContent=t.cost!=null?money(t.cost,t.cur):"";
     li.append(left,c);
@@ -167,13 +208,15 @@ async function search(){
   if(!q)return;
   ul.innerHTML='<li>検索中…</li>';
   try{
-    const r=await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=ja&q="+encodeURIComponent(q));
+    const r=await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&addressdetails=1&accept-language=ja&q="+encodeURIComponent(q));
     const arr=await r.json();
     ul.innerHTML="";
     if(!arr.length){ul.innerHTML='<li>見つかりませんでした。別の言葉で試してください。</li>';return}
     arr.forEach(x=>{
-      const li=document.createElement("li");li.textContent=x.display_name;
-      li.onclick=()=>{ul.innerHTML="";map.setView([+x.lat,+x.lon],13);openForm({lat:+(+x.lat).toFixed(5),lon:+(+x.lon).toFixed(5),name:x.name||x.display_name.split(",")[0]})};
+      const nm=x.name||x.display_name.split(",")[0],ct=countryJa(x.address),ad=x.address||{};
+      const area=[ad.state||ad.region||ad.county,ct].filter(Boolean).join("、");
+      const li=document.createElement("li");li.textContent=nm+(area?"（"+area+"）":"");
+      li.onclick=()=>{ul.innerHTML="";map.setView([+x.lat,+x.lon],13);openForm({lat:+(+x.lat).toFixed(5),lon:+(+x.lon).toFixed(5),name:nm,country:ct})};
       ul.append(li);
     });
   }catch(e){ul.innerHTML='<li>検索できませんでした。通信状況を確認してください。</li>'}
@@ -182,11 +225,12 @@ $("#go").onclick=search;
 $("#q").addEventListener("keydown",e=>{if(e.key==="Enter")search()});
 
 /* form */
-const F={name:$("#f-name"),date:$("#f-date"),cost:$("#f-cost"),cur:$("#f-cur"),note:$("#f-note")};
+const F={name:$("#f-name"),country:$("#f-country"),date:$("#f-date"),cost:$("#f-cost"),cur:$("#f-cur"),note:$("#f-note")};
+$("#countries").innerHTML=COUNTRIES.map(c=>'<option value="'+c+'">').join("");
 function openForm(t){
   cur=t||{};delArmed=false;
   $("#f-title").textContent=cur.id?"場所を編集":"場所を追加";
-  F.name.value=cur.name||"";F.date.value=cur.date||"";F.cost.value=cur.cost!=null?cur.cost:"";
+  F.name.value=cur.name||"";F.country.value=cur.country||"";F.date.value=cur.date||"";F.cost.value=cur.cost!=null?cur.cost:"";
   F.cur.value=cur.cur||"JPY";F.note.value=cur.note||"";
   $("#f-del").hidden=!cur.id;$("#f-del").textContent="削除";$("#f-err").textContent="";
   $("#sheet").hidden=false;F.name.focus();
@@ -199,7 +243,7 @@ $("#f-save").onclick=()=>{
   const name=F.name.value.trim();
   if(!name){$("#f-err").textContent="場所名を入力してください。";return}
   const raw=F.cost.value;
-  const t={id:cur.id||"t"+Date.now().toString(36),name,date:F.date.value,cost:raw===""?null:Number(raw),cur:F.cur.value,note:F.note.value.trim(),lat:cur.lat,lon:cur.lon};
+  const t={id:cur.id||"t"+Date.now().toString(36),name,country:normCountry(F.country.value),date:F.date.value,cost:raw===""?null:Number(raw),cur:F.cur.value,note:F.note.value.trim(),lat:cur.lat,lon:cur.lon};
   const i=trips.findIndex(x=>x.id===t.id);
   i>=0?trips[i]=t:trips.push(t);
   persist();closeForm();render();
@@ -224,6 +268,8 @@ $("#file").onchange=async e=>{
   }catch(err){}
   e.target.value="";
 };
+$("#sort").value=sortKey;
+$("#sort").onchange=e=>{sortKey=e.target.value;try{localStorage.setItem("tm_sort",sortKey)}catch(err){}render()};
 render();
 </script>
 </body>
