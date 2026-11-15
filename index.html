@@ -33,11 +33,11 @@ input,select,textarea{width:100%;border:1px solid var(--line);background:var(--s
 .pin{width:16px;height:16px;border-radius:50%;background:var(--pin);border:3px solid var(--onpin);box-shadow:0 1px 4px rgba(0,0,0,.45)}
 .leaflet-tooltip{font-weight:700}
 .list{list-style:none;margin:0;padding:0}
-.item{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:14px 0;border-bottom:1px solid var(--line);cursor:pointer}
-.item h3{margin:0;font-size:17px}.item .meta{color:var(--mute);font-size:13px}
-.item .cost{font-weight:700;text-align:right}
-.item p{grid-column:1/-1;margin:2px 0 0;font-size:14px;color:var(--mute);white-space:pre-wrap}
-.item .go{grid-column:1/-1;justify-self:start;font-size:13px;padding:4px 12px}
+.item{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:0 10px;padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.item h3{margin:0;font-size:16px;line-height:1.35}.item .meta{color:var(--mute);font-size:12.5px;line-height:1.4}
+.item .cost{font-weight:700;text-align:right;font-size:15px}
+.item p{grid-column:1/-1;margin:1px 0 0;font-size:13px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .go{font-size:13px;padding:4px 11px}
 .empty{color:var(--mute);padding:28px 0;text-align:center}
 .sortbar{display:flex;align-items:center;gap:8px;margin-bottom:6px}.sortbar label{margin:0;white-space:nowrap}.sortbar select{max-width:240px}
 .tools{display:flex;gap:8px;margin-top:18px}
@@ -185,10 +185,10 @@ function render(){
     const left=document.createElement("div");left.append(h,m);
     const c=document.createElement("div");c.className="cost";c.textContent=t.cost!=null?money(t.cost,t.cur):"";
     li.append(left,c);
-    if(t.note){const p=document.createElement("p");p.textContent=t.note;li.append(p)}
-    const go=document.createElement("button");go.className="btn ghost go";go.textContent="地図で見る";
+    const go=document.createElement("button");go.className="btn ghost go";go.textContent="地図";go.setAttribute("aria-label","地図で見る");
     go.onclick=e=>{e.stopPropagation();show("map");map.setView([t.lat,t.lon],12)};
     li.append(go);
+    if(t.note){const p=document.createElement("p");p.textContent=t.note;li.append(p)}
     li.onclick=()=>openForm(t);
     L_.append(li);
   });
