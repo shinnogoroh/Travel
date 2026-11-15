@@ -33,12 +33,13 @@ input,select,textarea{width:100%;border:1px solid var(--line);background:var(--s
 .pin{width:16px;height:16px;border-radius:50%;background:var(--pin);border:3px solid var(--onpin);box-shadow:0 1px 4px rgba(0,0,0,.45)}
 .leaflet-tooltip{font-weight:700}
 .list{list-style:none;margin:0;padding:0}
-.item{display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:0 10px;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.item{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:0 10px;padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer}
 .item .left{display:flex;align-items:baseline;gap:8px;min-width:0}
 .item h3{margin:0;font-size:15px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .item .meta{color:var(--mute);font-size:12px;white-space:nowrap;flex:none}
 .item .cost{font-weight:700;text-align:right;font-size:14px;white-space:nowrap}
 #f-go{margin-top:10px}
+.item .go{padding:3px 9px;font-size:14px;line-height:1.4}
 .empty{color:var(--mute);padding:28px 0;text-align:center}
 .sortbar{display:flex;align-items:center;gap:8px;margin-bottom:6px}.sortbar label{margin:0;white-space:nowrap}.sortbar select{max-width:240px}
 .tools{display:flex;gap:8px;margin-top:18px}
@@ -187,6 +188,9 @@ function render(){
     const left=document.createElement("div");left.className="left";left.append(h,m);
     const c=document.createElement("div");c.className="cost";c.textContent=t.cost!=null?money(t.cost,t.cur):"";
     li.append(left,c);
+    const go=document.createElement("button");go.className="btn ghost go";go.textContent="📍";go.title="地図で見る";go.setAttribute("aria-label","地図で見る");
+    go.onclick=e=>{e.stopPropagation();show("map");map.setView([t.lat,t.lon],12)};
+    li.append(go);
     li.onclick=()=>openForm(t);
     L_.append(li);
   });
