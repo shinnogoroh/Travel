@@ -33,11 +33,12 @@ input,select,textarea{width:100%;border:1px solid var(--line);background:var(--s
 .pin{width:16px;height:16px;border-radius:50%;background:var(--pin);border:3px solid var(--onpin);box-shadow:0 1px 4px rgba(0,0,0,.45)}
 .leaflet-tooltip{font-weight:700}
 .list{list-style:none;margin:0;padding:0}
-.item{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:0 10px;padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer}
-.item h3{margin:0;font-size:16px;line-height:1.35}.item .meta{color:var(--mute);font-size:12.5px;line-height:1.4}
-.item .cost{font-weight:700;text-align:right;font-size:15px}
-.item p{grid-column:1/-1;margin:1px 0 0;font-size:13px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.item .go{font-size:13px;padding:4px 11px}
+.item{display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:0 10px;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.item .left{display:flex;align-items:baseline;gap:8px;min-width:0}
+.item h3{margin:0;font-size:15px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.item .meta{color:var(--mute);font-size:12px;white-space:nowrap;flex:none}
+.item .cost{font-weight:700;text-align:right;font-size:14px;white-space:nowrap}
+#f-go{margin-top:10px}
 .empty{color:var(--mute);padding:28px 0;text-align:center}
 .sortbar{display:flex;align-items:center;gap:8px;margin-bottom:6px}.sortbar label{margin:0;white-space:nowrap}.sortbar select{max-width:240px}
 .tools{display:flex;gap:8px;margin-top:18px}
@@ -93,6 +94,7 @@ textarea{min-height:88px;resize:vertical}
     </div>
     <label for="f-note">コメント</label>
     <textarea id="f-note" placeholder="思い出、おすすめ、また行きたいかなど"></textarea>
+    <button class="btn ghost" id="f-go" hidden>地図で見る</button>
     <p class="err" id="f-err" role="alert"></p>
     <div class="actions">
       <button class="btn danger" id="f-del" hidden>削除</button>
@@ -160,7 +162,7 @@ function sorted(){
   };
   return [...trips].sort(by[sortKey]||by["date-desc"]);
 }
-const fmtDate=d=>d?d.replace(/^(\d{4})-(\d{2})$/,(m,y,mo)=>y+"年"+(+mo)+"月"):"";
+const fmtDate=d=>d?d.replace(/^(\d{4})-(\d{2})$/,(m,y,mo)=>y+"/"+mo):"";
 
 function drawMarkers(){
   Object.values(markers).forEach(m=>m.remove());markers={};
@@ -181,14 +183,10 @@ function render(){
   sorted().forEach(t=>{
     const li=document.createElement("li");li.className="item";
     const h=document.createElement("h3");h.textContent=t.name;
-    const m=document.createElement("div");m.className="meta";m.textContent=[t.country,fmtDate(t.date)||"時期未設定"].filter(Boolean).join("　");
-    const left=document.createElement("div");left.append(h,m);
+    const m=document.createElement("div");m.className="meta";m.textContent=[t.country,fmtDate(t.date)].filter(Boolean).join(" ");
+    const left=document.createElement("div");left.className="left";left.append(h,m);
     const c=document.createElement("div");c.className="cost";c.textContent=t.cost!=null?money(t.cost,t.cur):"";
     li.append(left,c);
-    const go=document.createElement("button");go.className="btn ghost go";go.textContent="地図";go.setAttribute("aria-label","地図で見る");
-    go.onclick=e=>{e.stopPropagation();show("map");map.setView([t.lat,t.lon],12)};
-    li.append(go);
-    if(t.note){const p=document.createElement("p");p.textContent=t.note;li.append(p)}
     li.onclick=()=>openForm(t);
     L_.append(li);
   });
@@ -232,11 +230,12 @@ function openForm(t){
   $("#f-title").textContent=cur.id?"場所を編集":"場所を追加";
   F.name.value=cur.name||"";F.country.value=cur.country||"";F.date.value=cur.date||"";F.cost.value=cur.cost!=null?cur.cost:"";
   F.cur.value=cur.cur||"JPY";F.note.value=cur.note||"";
-  $("#f-del").hidden=!cur.id;$("#f-del").textContent="削除";$("#f-err").textContent="";
+  $("#f-go").hidden=!cur.id;$("#f-del").hidden=!cur.id;$("#f-del").textContent="削除";$("#f-err").textContent="";
   $("#sheet").hidden=false;F.name.focus();
 }
 function closeForm(){$("#sheet").hidden=true;cur=null}
 $("#add").onclick=()=>{show("map");$("#f-err").textContent="";alert("地図をタップするか、検索して場所を選んでください。")};
+$("#f-go").onclick=()=>{const t=cur;closeForm();show("map");map.setView([t.lat,t.lon],12)};
 $("#f-cancel").onclick=closeForm;
 $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeForm()});
 $("#f-save").onclick=()=>{
